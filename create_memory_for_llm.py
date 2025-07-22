@@ -1,46 +1,44 @@
-from langchain_community.document_loaders import PyPDFLoader, DirectoryLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain.vectorstores import FAISS  # or Chroma, etc.
+from langchain.embeddings import HuggingFaceEmbeddings
+from langchain.chains import RetrievalQA
+from langchain_groq import ChatGroq
+from langchain.document_loaders import TextLoader  # or JSONLoader, PDFLoader, etc.
+import os
 
-## Uncomment the following files if you're not using pipenv as your virtual environment manager
-#from dotenv import load_dotenv, find_dotenv
-#load_dotenv(find_dotenv())
+# Step 1: Set Groq API Key
+os.environ["GROQ_API_KEY"] = "your_groq_api_key"
 
+# Step 2: Load or create your vectorstore
+embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")  # or any compatible model
 
-# Step 1: Load raw PDF(s)
-DATA_PATH="data/"
-def load_pdf_files(data):
-    loader = DirectoryLoader(data,
-                             glob='*.pdf',
-                             loader_cls=PyPDFLoader)
-    
-    documents=loader.load()
-    return documents
+# Example: Load existing FAISS vectorstore from disk
+vectorstore = FAISS.load_local("vectorstore_path", embeddings=embedding_model)
 
-documents=load_pdf_files(data=DATA_PATH)
-#print("Length of PDF pages: ", len(documents))
+# Step 3: Define the LLM (Groq)
+llm = ChatGroq(
+    api_key=os.environ["GROQ_API_KEY"],
+    model_name="llama3-8b-8192"  # or "mixtral-8x7b-32768"
+)
 
+# Step 4: Build RetrievalQA chain
+qa_chain = RetrievalQA.from_chain_type(
+    llm=llm,
+    retriever=vectorstore.as_retriever(),
+    return_source_documents=True
+)
 
-# Step 2: Create Chunks
-def create_chunks(extracted_data):
-    text_splitter=RecursiveCharacterTextSplitter(chunk_size=500,
-                                                 chunk_overlap=50)
-    text_chunks=text_splitter.split_documents(extracted_data)
-    return text_chunks
+# Step 5: Get user query and run chain
+user_query = "What type of data we have"
 
-text_chunks=create_chunks(extracted_data=documents)
-#print("Length of Text Chunks: ", len(text_chunks))
+# Optional Debug: Print what documents are being retrieved
+retrieved_docs = vectorstore.similarity_search(user_query, k=3)
+print("📄 Retrieved Documents:")
+for i, doc in enumerate(retrieved_docs, 1):
+    print(f"\n--- Document {i} ---\n{doc.page_content}")
 
-# Step 3: Create Vector Embeddings 
+# Step 6: Get response from chain
+response = qa_chain.invoke({'query': user_query})
 
-def get_embedding_model():
-    embedding_model=HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-    return embedding_model
-
-embedding_model=get_embedding_model()
-
-# Step 4: Store embeddings in FAISS
-DB_FAISS_PATH="vectorstore/db_faiss"
-db=FAISS.from_documents(text_chunks, embedding_model)
-db.save_local(DB_FAISS_PATH)
+# Step 7: Print the response
+print("\n🤖 Answer:")
+print(response["result"])

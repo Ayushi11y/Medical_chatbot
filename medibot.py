@@ -11,8 +11,8 @@ from langchain_groq import ChatGroq
 
 
 ## Uncomment the following files if you're not using pipenv as your virtual environment manager
-#from dotenv import load_dotenv, find_dotenv
-#load_dotenv(find_dotenv())
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv())
 
 
 DB_FAISS_PATH="vectorstore/db_faiss"
@@ -54,16 +54,22 @@ def main():
         st.session_state.messages.append({'role':'user', 'content': prompt})
 
         CUSTOM_PROMPT_TEMPLATE = """
-                Use the pieces of information provided in the context to answer user's question.
-                If you dont know the answer, just say that you dont know, dont try to make up an answer. 
-                Dont provide anything out of the given context
+You are a helpful and knowledgeable medical assistant.
 
-                Context: {context}
-                Question: {question}
+Use the context below to answer the user's question in a clear, detailed, and well-explained paragraph.
+If the question is vague (e.g., "explain more"), try to continue or elaborate based on previous context or the most likely topic.
 
-                Start the answer directly. No small talk please.
-                """
-        
+If the answer is not found in the context, say "I don't know."
+
+Context:
+{context}
+
+Question:
+{question}
+
+Answer:
+"""
+
         #HUGGINGFACE_REPO_ID="mistralai/Mistral-7B-Instruct-v0.3" # PAID
         #HF_TOKEN=os.environ.get("HF_TOKEN")  
 
@@ -79,19 +85,19 @@ def main():
                     model_name="meta-llama/llama-4-maverick-17b-128e-instruct",  # free, fast Groq-hosted model
                     temperature=0.0,
                     groq_api_key=os.environ["GROQ_API_KEY"],  # replace with your Groq API key
-                    groq_api_key=os.environ["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"],
+                    
                 ),
                 chain_type="stuff",
                 retriever=vectorstore.as_retriever(search_kwargs={'k':3}),
-                return_source_documents=True,
+                return_source_documents=False,
                 chain_type_kwargs={'prompt': set_custom_prompt(CUSTOM_PROMPT_TEMPLATE)}
             )
 
-            response=qa_chain.invoke({'query':prompt})
+            response = qa_chain.invoke({'query': prompt})
+            result = response["result"]
+            result_to_show = result 
 
-            result=response["result"]
-            source_documents=response["source_documents"]
-            result_to_show=result+"\nSource Docs:\n"+str(source_documents)
+
             #response="Hi, I am MediBot!"
             st.chat_message('assistant').markdown(result_to_show)
             st.session_state.messages.append({'role':'assistant', 'content': result_to_show})
